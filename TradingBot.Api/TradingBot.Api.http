@@ -1,0 +1,6 @@
+@TradingBot.Api_HostAddress = http://localhost:5132
+
+GET {{TradingBot.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
