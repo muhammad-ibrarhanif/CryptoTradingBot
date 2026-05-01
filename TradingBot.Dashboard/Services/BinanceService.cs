@@ -343,8 +343,7 @@ public class BinanceService
     {
         var metrics = new BacktestMetrics();
         var historicalSignals = new List<HistoricalSignal>();
-        var patternWins = new Dictionary<string, int>();
-        var patternCounts = new Dictionary<string, int>();
+        var patternStats = new Dictionary<string, (int total, int wins, decimal totalPnL)>();
 
         var candles5M = await GetHistoricalCandlesAsync(symbol, "5m", startDate, endDate);
 
@@ -353,6 +352,8 @@ public class BinanceService
             Console.WriteLine("Insufficient data for backtest");
             return metrics;
         }
+
+        Console.WriteLine($"Backtesting {candles5M.Count} 5M candles from {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}");
 
         for (int i = 60; i < candles5M.Count - 24; i++)
         {
@@ -373,75 +374,68 @@ public class BinanceService
 
             if (isBuySignal || isSellSignal)
             {
-                var entryPrice = lastCandle.Close;
-                var patternName = ExtractPatternName(analysis.Pattern);
+                decimal entryPrice = lastCandle.Close;
+                string patternName = ExtractPatternName(analysis.Pattern);
 
-                if (!patternCounts.ContainsKey(patternName)) patternCounts[patternName] = 0;
-                patternCounts[patternName]++;
+                decimal targetPrice = isBuySignal ? analysis.Resistance : analysis.Support;
+                decimal stopPrice = isBuySignal ? analysis.Support * 0.995m : analysis.Resistance * 1.005m;
 
                 decimal exitPrice = entryPrice;
+                bool hitTarget = false;
+                bool hitStop = false;
+                int exitIndex = i;
+
+                for (int j = i + 1; j < Math.Min(i + 48, candles5M.Count); j++)
+                {
+                    if (isBuySignal && candles5M[j].High >= targetPrice)
+                    {
+                        exitPrice = targetPrice;
+                        hitTarget = true;
+                        exitIndex = j;
+                        break;
+                    }
+                    if (isSellSignal && candles5M[j].Low <= targetPrice)
+                    {
+                        exitPrice = targetPrice;
+                        hitTarget = true;
+                        exitIndex = j;
+                        break;
+                    }
+                    if (isBuySignal && candles5M[j].Low <= stopPrice)
+                    {
+                        exitPrice = stopPrice;
+                        hitStop = true;
+                        exitIndex = j;
+                        break;
+                    }
+                    if (isSellSignal && candles5M[j].High >= stopPrice)
+                    {
+                        exitPrice = stopPrice;
+                        hitStop = true;
+                        exitIndex = j;
+                        break;
+                    }
+                }
+
+                if (!hitTarget && !hitStop)
+                {
+                    exitPrice = candles5M[Math.Min(i + 48, candles5M.Count - 1)].Close;
+                }
+
+                // Calculate P&L correctly
+                decimal pnlPercent = 0;
                 bool isWinner = false;
-                decimal targetPrice = 0;
-                decimal stopPrice = 0;
 
                 if (isBuySignal)
                 {
-                    targetPrice = analysis.Resistance;
-                    stopPrice = analysis.Support * 0.995m;
-
-                    int j = i + 1;
-                    for (; j < Math.Min(i + 48, candles5M.Count); j++)
-                    {
-                        if (candles5M[j].High >= targetPrice)
-                        {
-                            exitPrice = targetPrice;
-                            isWinner = true;
-                            break;
-                        }
-                        if (candles5M[j].Low <= stopPrice)
-                        {
-                            exitPrice = stopPrice;
-                            isWinner = false;
-                            break;
-                        }
-                    }
-
-                    if (j >= candles5M.Count || j >= i + 48)
-                    {
-                        exitPrice = candles5M[Math.Min(j - 1, candles5M.Count - 1)].Close;
-                        isWinner = exitPrice > entryPrice;
-                    }
+                    pnlPercent = (exitPrice - entryPrice) / entryPrice * 100m;
+                    isWinner = pnlPercent > 0;
                 }
-                else if (isSellSignal)
+                else
                 {
-                    targetPrice = analysis.Support;
-                    stopPrice = analysis.Resistance * 1.005m;
-
-                    int j = i + 1;
-                    for (; j < Math.Min(i + 48, candles5M.Count); j++)
-                    {
-                        if (candles5M[j].Low <= targetPrice)
-                        {
-                            exitPrice = targetPrice;
-                            isWinner = true;
-                            break;
-                        }
-                        if (candles5M[j].High >= stopPrice)
-                        {
-                            exitPrice = stopPrice;
-                            isWinner = false;
-                            break;
-                        }
-                    }
-
-                    if (j >= candles5M.Count || j >= i + 48)
-                    {
-                        exitPrice = candles5M[Math.Min(j - 1, candles5M.Count - 1)].Close;
-                        isWinner = exitPrice < entryPrice;
-                    }
+                    pnlPercent = (entryPrice - exitPrice) / entryPrice * 100m;
+                    isWinner = pnlPercent > 0;
                 }
-
-                decimal pnlPercent = isBuySignal ? (exitPrice - entryPrice) / entryPrice * 100m : (entryPrice - exitPrice) / entryPrice * 100m;
 
                 historicalSignals.Add(new HistoricalSignal
                 {
@@ -453,23 +447,28 @@ public class BinanceService
                     PnL = pnlPercent,
                     PnLPercent = pnlPercent,
                     IsWinner = isWinner,
-                    Timeframe = "5M"
+                    Timeframe = "5M",
+                    Reason = isBuySignal ? $"{patternName} at support {analysis.Support:F4}" : $"{patternName} at resistance {analysis.Resistance:F4}"
                 });
 
-                if (isWinner)
-                {
-                    if (!patternWins.ContainsKey(patternName)) patternWins[patternName] = 0;
-                    patternWins[patternName]++;
-                }
+                // Track pattern stats
+                if (!patternStats.ContainsKey(patternName))
+                    patternStats[patternName] = (0, 0, 0);
+                var stats = patternStats[patternName];
+                patternStats[patternName] = (stats.total + 1, stats.wins + (isWinner ? 1 : 0), stats.totalPnL + pnlPercent);
 
-                i += 12;
+                i = exitIndex + 12;
             }
         }
 
         var winners = historicalSignals.Where(s => s.IsWinner).ToList();
         var losers = historicalSignals.Where(s => !s.IsWinner).ToList();
 
-        var bestPattern = patternCounts.OrderByDescending(p => patternWins.GetValueOrDefault(p.Key, 0) / (double)p.Value)
+        decimal totalPnL = historicalSignals.Sum(s => s.PnL);
+        decimal totalWins = winners.Sum(w => w.PnL);
+        decimal totalLosses = losers.Sum(l => Math.Abs(l.PnL));
+
+        var bestPattern = patternStats.OrderByDescending(p => p.Value.wins / (double)p.Value.total)
                                        .FirstOrDefault();
 
         metrics.TotalSignals = historicalSignals.Count;
@@ -477,13 +476,15 @@ public class BinanceService
         metrics.WinningTrades = winners.Count;
         metrics.LosingTrades = losers.Count;
         metrics.WinRate = metrics.TotalTrades > 0 ? (double)winners.Count / metrics.TotalTrades * 100 : 0;
-        metrics.TotalPnL = historicalSignals.Sum(s => s.PnL);
-        metrics.TotalPnLPercent = metrics.TotalPnL;
-        metrics.AvgWin = winners.Count > 0 ? winners.Average(w => w.PnL) : 0;
-        metrics.AvgLoss = losers.Count > 0 ? Math.Abs(losers.Average(l => l.PnL)) : 0;
-        metrics.ProfitFactor = metrics.AvgLoss > 0 ? metrics.AvgWin / metrics.AvgLoss : metrics.AvgWin > 0 ? 999 : 0;
+        metrics.TotalPnL = totalPnL;
+        metrics.TotalPnLPercent = totalPnL;
+        metrics.AvgWin = winners.Count > 0 ? totalWins / winners.Count : 0;
+        metrics.AvgLoss = losers.Count > 0 ? totalLosses / losers.Count : 0;
+        metrics.ProfitFactor = totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? 999 : 0;
         metrics.BestPattern = bestPattern.Key ?? "None";
-        metrics.BestPatternWins = patternWins.GetValueOrDefault(bestPattern.Key, 0);
+        metrics.BestPatternWins = bestPattern.Value.wins;
+
+        Console.WriteLine($"Backtest complete: {metrics.TotalTrades} trades, Win Rate: {metrics.WinRate:F1}%, Total P&L: {metrics.TotalPnL:F2}%, Profit Factor: {metrics.ProfitFactor:F2}");
 
         return metrics;
     }
@@ -522,5 +523,208 @@ public class BinanceService
         if (pattern.Contains("DARK CLOUD")) return "Dark Cloud";
         if (pattern.Contains("HARAMI")) return "Harami";
         return "Pattern";
+    }
+
+    // ============ 1-MINUTE SCALPING METHODS ============
+
+    public async Task<List<Candle>> Get1MinuteCandlesAsync(string symbol, DateTime start, DateTime end)
+    {
+        var allCandles = new List<Candle>();
+        var currentStart = start;
+
+        using var client = new BinanceRestClient();
+
+        while (currentStart < end)
+        {
+            var result = await client.SpotApi.ExchangeData.GetKlinesAsync(symbol, KlineInterval.OneMinute, currentStart, end, limit: 1000);
+            if (!result.Success || result.Data == null || !result.Data.Any())
+                break;
+
+            var candles = result.Data.Select(k => new Candle
+            {
+                OpenTime = k.OpenTime,
+                Open = k.OpenPrice,
+                High = k.HighPrice,
+                Low = k.LowPrice,
+                Close = k.ClosePrice,
+                Volume = k.Volume,
+                CloseTime = k.CloseTime
+            }).ToList();
+
+            allCandles.AddRange(candles);
+
+            if (candles.Count < 1000)
+                break;
+
+            currentStart = candles.Last().OpenTime.AddMinutes(1);
+            await Task.Delay(100);
+        }
+
+        return allCandles;
+    }
+
+    public async Task<(BacktestMetrics Metrics, List<HistoricalSignal> Signals)> Run1MinuteScalpingBacktestAsync(string symbol, DateTime startDate, DateTime endDate)
+    {
+        var metrics = new BacktestMetrics();
+        var historicalSignals = new List<HistoricalSignal>();
+        var patternStats = new Dictionary<string, (int total, int wins, decimal totalPnL)>();
+
+        // Use SAME warmup for all timeframes (7 days before start date)
+        var warmupStart = startDate.AddDays(-7);
+
+        var candles1M = await Get1MinuteCandlesAsync(symbol, warmupStart, endDate);
+        var candles15M = await GetHistoricalCandlesAsync(symbol, "15m", warmupStart, endDate);
+        var candles1H = await GetHistoricalCandlesAsync(symbol, "1H", warmupStart, endDate);
+
+        if (candles1M.Count < 500)
+        {
+            Console.WriteLine($"Insufficient 1M data: {candles1M.Count} candles");
+            return (metrics, historicalSignals);
+        }
+
+        Console.WriteLine($"1M Scalping Backtest: {candles1M.Count} candles from {startDate:yyyy-MM-dd} to {endDate:yyyy-MM-dd}");
+
+        const decimal targetPercent = 0.15m;
+        const decimal stopPercent = 0.1m;
+        const int maxHoldMinutes = 10;
+
+        // Find the index where the start date begins (to only backtest from startDate)
+        int startIndex = 0;
+        for (int i = 0; i < candles1M.Count; i++)
+        {
+            if (candles1M[i].OpenTime >= startDate)
+            {
+                startIndex = i;
+                break;
+            }
+        }
+
+        for (int i = startIndex + 30; i < candles1M.Count - maxHoldMinutes; i++)
+        {
+            // Get 1M analysis (using last 30 candles for pattern detection)
+            var analysisCandles1M = candles1M.Skip(Math.Max(0, i - 30)).Take(30).ToList();
+            var analysis1M = AnalyzeTimeframe(analysisCandles1M, "1M");
+
+            // Get higher timeframe trends (using candles up to current time)
+            var relevant15M = candles15M.Where(c => c.OpenTime <= candles1M[i].OpenTime).ToList();
+            var analysis15M = AnalyzeTimeframe(relevant15M, "15M");
+
+            var relevant1H = candles1H.Where(c => c.OpenTime <= candles1M[i].OpenTime).ToList();
+            var analysis1H = AnalyzeTimeframe(relevant1H, "1H");
+
+            var currentCandle = candles1M[i];
+            var pattern = analysis1M.Pattern.ToUpper();
+            var nearSupport = analysis1M.NearSupport;
+            var nearResistance = analysis1M.NearResistance;
+
+            bool isUptrend = analysis15M.Trend.Contains("UPTREND") || analysis1H.Trend.Contains("UPTREND");
+            bool isDowntrend = analysis15M.Trend.Contains("DOWNTREND") || analysis1H.Trend.Contains("DOWNTREND");
+
+            bool isBuy = (pattern.Contains("HAMMER") || pattern.Contains("TWEEZERS BOTTOM") || pattern.Contains("BULLISH ENGULFING")) && nearSupport && isUptrend;
+            bool isSell = (pattern.Contains("SHOOTING STAR") || pattern.Contains("TWEEZERS TOP") || pattern.Contains("BEARISH ENGULFING")) && nearResistance && isDowntrend;
+
+            if (isBuy || isSell)
+            {
+                decimal entryPrice = currentCandle.Close;
+                decimal targetPrice = isBuy ? entryPrice * (1 + targetPercent / 100m) : entryPrice * (1 - targetPercent / 100m);
+                decimal stopPrice = isBuy ? entryPrice * (1 - stopPercent / 100m) : entryPrice * (1 + stopPercent / 100m);
+
+                string patternName = ExtractPatternName(analysis1M.Pattern);
+
+                decimal exitPrice = entryPrice;
+                bool hitTarget = false;
+                bool hitStop = false;
+                int exitIndex = i;
+
+                for (int j = i + 1; j < Math.Min(i + maxHoldMinutes, candles1M.Count); j++)
+                {
+                    if (isBuy && candles1M[j].High >= targetPrice)
+                    {
+                        exitPrice = targetPrice;
+                        hitTarget = true;
+                        exitIndex = j;
+                        break;
+                    }
+                    if (isSell && candles1M[j].Low <= targetPrice)
+                    {
+                        exitPrice = targetPrice;
+                        hitTarget = true;
+                        exitIndex = j;
+                        break;
+                    }
+                    if (isBuy && candles1M[j].Low <= stopPrice)
+                    {
+                        exitPrice = stopPrice;
+                        hitStop = true;
+                        exitIndex = j;
+                        break;
+                    }
+                    if (isSell && candles1M[j].High >= stopPrice)
+                    {
+                        exitPrice = stopPrice;
+                        hitStop = true;
+                        exitIndex = j;
+                        break;
+                    }
+                }
+
+                if (!hitTarget && !hitStop)
+                {
+                    exitPrice = candles1M[Math.Min(i + maxHoldMinutes, candles1M.Count - 1)].Close;
+                }
+
+                decimal pnlPercent = isBuy ? (exitPrice - entryPrice) / entryPrice * 100m : (entryPrice - exitPrice) / entryPrice * 100m;
+                bool isWinner = pnlPercent > 0;
+
+                historicalSignals.Add(new HistoricalSignal
+                {
+                    Time = currentCandle.OpenTime,
+                    Type = isBuy ? "BUY" : "SELL",
+                    Pattern = patternName,
+                    EntryPrice = entryPrice,
+                    ExitPrice = exitPrice,
+                    PnL = pnlPercent,
+                    PnLPercent = pnlPercent,
+                    IsWinner = isWinner,
+                    Timeframe = "1M",
+                    Reason = isBuy ? $"{patternName} at support {analysis1M.Support:F4}" : $"{patternName} at resistance {analysis1M.Resistance:F4}",
+                    Trend1H = analysis1H.Trend,
+                    Trend15M = analysis15M.Trend
+                });
+
+                if (!patternStats.ContainsKey(patternName))
+                    patternStats[patternName] = (0, 0, 0);
+                var stats = patternStats[patternName];
+                patternStats[patternName] = (stats.total + 1, stats.wins + (isWinner ? 1 : 0), stats.totalPnL + pnlPercent);
+
+                i = exitIndex + 5;
+            }
+        }
+
+        var winners = historicalSignals.Where(s => s.IsWinner).ToList();
+        var losers = historicalSignals.Where(s => !s.IsWinner).ToList();
+
+        decimal totalPnL = historicalSignals.Sum(s => s.PnL);
+        decimal totalWins = winners.Sum(w => w.PnL);
+        decimal totalLosses = losers.Sum(l => Math.Abs(l.PnL));
+
+        var bestPattern = patternStats.OrderByDescending(p => p.Value.wins / (double)p.Value.total).FirstOrDefault();
+
+        metrics.TotalSignals = historicalSignals.Count;
+        metrics.TotalTrades = historicalSignals.Count;
+        metrics.WinningTrades = winners.Count;
+        metrics.LosingTrades = losers.Count;
+        metrics.WinRate = metrics.TotalTrades > 0 ? (double)winners.Count / metrics.TotalTrades * 100 : 0;
+        metrics.TotalPnL = totalPnL;
+        metrics.TotalPnLPercent = totalPnL;
+        metrics.AvgWin = winners.Count > 0 ? totalWins / winners.Count : 0;
+        metrics.AvgLoss = losers.Count > 0 ? totalLosses / losers.Count : 0;
+        metrics.ProfitFactor = totalLosses > 0 ? totalWins / totalLosses : totalWins > 0 ? 999 : 0;
+        metrics.BestPattern = bestPattern.Key ?? "None";
+        metrics.BestPatternWins = bestPattern.Value.wins;
+
+        Console.WriteLine($"1M Scalping Backtest complete: {metrics.TotalTrades} trades, Win Rate: {metrics.WinRate:F1}%, Total P&L: {metrics.TotalPnL:F2}%");
+
+        return (metrics, historicalSignals);
     }
 }

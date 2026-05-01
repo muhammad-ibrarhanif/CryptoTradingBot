@@ -129,3 +129,6 @@ h1 {
     padding: 20px;
     color: #8b949e;
 }
+.history-panel {
+    overflow-x: auto; /* Add this */
+}

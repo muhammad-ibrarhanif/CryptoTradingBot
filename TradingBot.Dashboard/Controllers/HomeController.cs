@@ -14,6 +14,61 @@ public class HomeController : Controller
         _binanceService = new BinanceService();
     }
 
+    //public async Task<IActionResult> Index(string symbol = "SOLUSDT", DateTime? startDate = null, DateTime? endDate = null, bool historical = false)
+    //{
+    //    var viewModel = new ChartViewModel
+    //    {
+    //        Symbol = symbol,
+    //        IsHistorical = historical,
+    //        StartDate = startDate ?? DateTime.UtcNow.AddDays(-7),
+    //        EndDate = endDate ?? DateTime.UtcNow,
+    //        LastUpdate = DateTime.UtcNow
+    //    };
+
+    //    try
+    //    {
+    //        if (historical && startDate.HasValue && endDate.HasValue)
+    //        {
+    //            // Historical mode - load data for backtest
+    //            viewModel.Candles1H = await _binanceService.GetHistoricalCandlesAsync(symbol, "1H", startDate.Value, endDate.Value);
+    //            viewModel.Candles15M = await _binanceService.GetHistoricalCandlesAsync(symbol, "15m", startDate.Value.AddDays(-5), endDate.Value);
+    //            viewModel.Candles5M = await _binanceService.GetHistoricalCandlesAsync(symbol, "5m", startDate.Value, endDate.Value);
+
+    //            // Analyze each timeframe
+    //            viewModel.Analysis1H = _binanceService.AnalyzeTimeframe(viewModel.Candles1H, "1H");
+    //            viewModel.Analysis15M = _binanceService.AnalyzeTimeframe(viewModel.Candles15M, "15M");
+    //            viewModel.Analysis5M = _binanceService.AnalyzeTimeframe(viewModel.Candles5M, "5M");
+
+    //            // Run backtest
+    //            viewModel.Metrics = await _binanceService.RunBacktestAsync(symbol, startDate.Value, endDate.Value);
+
+    //            // Generate signals for display
+    //            viewModel.Signals = GenerateSignalsFromAnalysis(viewModel);
+    //        }
+    //        else
+    //        {
+    //            // Live mode - get recent data
+    //            viewModel.Candles1H = await _binanceService.GetCandlesAsync(symbol, "1H", 48);
+    //            viewModel.Candles15M = await _binanceService.GetCandlesAsync(symbol, "15m", 24);
+    //            viewModel.Candles5M = await _binanceService.GetCandlesAsync(symbol, "5m", 12);
+
+    //            // Analyze each timeframe
+    //            viewModel.Analysis1H = _binanceService.AnalyzeTimeframe(viewModel.Candles1H, "1H");
+    //            viewModel.Analysis15M = _binanceService.AnalyzeTimeframe(viewModel.Candles15M, "15M");
+    //            viewModel.Analysis5M = _binanceService.AnalyzeTimeframe(viewModel.Candles5M, "5M");
+
+    //            // Generate signals
+    //            viewModel.Signals = GenerateSignalsFromAnalysis(viewModel);
+    //        }
+    //    }
+    //    catch (Exception ex)
+    //    {
+    //        Console.WriteLine($"Error: {ex.Message}");
+    //    }
+
+    //    return View(viewModel);
+    //}
+
     public async Task<IActionResult> Index(string symbol = "SOLUSDT", DateTime? startDate = null, DateTime? endDate = null, bool historical = false)
     {
         var viewModel = new ChartViewModel
@@ -29,20 +84,34 @@ public class HomeController : Controller
         {
             if (historical && startDate.HasValue && endDate.HasValue)
             {
-                // Historical mode - load data for backtest
-                viewModel.Candles1H = await _binanceService.GetHistoricalCandlesAsync(symbol, "1H", startDate.Value, endDate.Value);
-                viewModel.Candles15M = await _binanceService.GetHistoricalCandlesAsync(symbol, "15m", startDate.Value.AddDays(-5), endDate.Value);
-                viewModel.Candles5M = await _binanceService.GetHistoricalCandlesAsync(symbol, "5m", startDate.Value, endDate.Value);
+                // Use consistent warmup period for ALL timeframes (7 days before start date)
+                var warmupStart = startDate.Value.AddDays(-7);
 
-                // Analyze each timeframe
-                viewModel.Analysis1H = _binanceService.AnalyzeTimeframe(viewModel.Candles1H, "1H");
-                viewModel.Analysis15M = _binanceService.AnalyzeTimeframe(viewModel.Candles15M, "15M");
-                viewModel.Analysis5M = _binanceService.AnalyzeTimeframe(viewModel.Candles5M, "5M");
+                // Fetch all timeframes with SAME start date for consistency
+                viewModel.Candles1H = await _binanceService.GetHistoricalCandlesAsync(symbol, "1H", warmupStart, endDate.Value);
+                viewModel.Candles15M = await _binanceService.GetHistoricalCandlesAsync(symbol, "15m", warmupStart, endDate.Value);
+                viewModel.Candles5M = await _binanceService.GetHistoricalCandlesAsync(symbol, "5m", warmupStart, endDate.Value);
+                viewModel.Candles1M = await _binanceService.Get1MinuteCandlesAsync(symbol, warmupStart, endDate.Value);
 
-                // Run backtest
-                viewModel.Metrics = await _binanceService.RunBacktestAsync(symbol, startDate.Value, endDate.Value);
+                // For analysis, use only data from the selected start date (ignore warmup data)
+                var analysisStart = startDate.Value;
+                var analysisCandles1H = viewModel.Candles1H.Where(c => c.OpenTime >= analysisStart).ToList();
+                var analysisCandles15M = viewModel.Candles15M.Where(c => c.OpenTime >= analysisStart).ToList();
+                var analysisCandles5M = viewModel.Candles5M.Where(c => c.OpenTime >= analysisStart).ToList();
+                var analysisCandles1M = viewModel.Candles1M.Where(c => c.OpenTime >= analysisStart).ToList();
 
-                // Generate signals for display
+                // Analyze each timeframe using filtered candles
+                viewModel.Analysis1H = _binanceService.AnalyzeTimeframe(analysisCandles1H, "1H");
+                viewModel.Analysis15M = _binanceService.AnalyzeTimeframe(analysisCandles15M, "15M");
+                viewModel.Analysis5M = _binanceService.AnalyzeTimeframe(analysisCandles5M, "5M");
+                viewModel.Analysis1M = _binanceService.AnalyzeTimeframe(analysisCandles1M, "1M");
+
+                // Run 1-minute scalping backtest with CONSISTENT warmup
+                var (scalpMetrics, scalpSignals) = await _binanceService.Run1MinuteScalpingBacktestAsync(symbol, startDate.Value, endDate.Value);
+                viewModel.Metrics = scalpMetrics;
+                viewModel.SignalHistory = scalpSignals;
+
+                // Generate signals
                 viewModel.Signals = GenerateSignalsFromAnalysis(viewModel);
             }
             else
@@ -51,11 +120,13 @@ public class HomeController : Controller
                 viewModel.Candles1H = await _binanceService.GetCandlesAsync(symbol, "1H", 48);
                 viewModel.Candles15M = await _binanceService.GetCandlesAsync(symbol, "15m", 24);
                 viewModel.Candles5M = await _binanceService.GetCandlesAsync(symbol, "5m", 12);
+                viewModel.Candles1M = await _binanceService.GetCandlesAsync(symbol, "1m", 2);
 
                 // Analyze each timeframe
                 viewModel.Analysis1H = _binanceService.AnalyzeTimeframe(viewModel.Candles1H, "1H");
                 viewModel.Analysis15M = _binanceService.AnalyzeTimeframe(viewModel.Candles15M, "15M");
                 viewModel.Analysis5M = _binanceService.AnalyzeTimeframe(viewModel.Candles5M, "5M");
+                viewModel.Analysis1M = _binanceService.AnalyzeTimeframe(viewModel.Candles1M, "1M");
 
                 // Generate signals
                 viewModel.Signals = GenerateSignalsFromAnalysis(viewModel);
