@@ -1,0 +1,355 @@
+﻿@model TradingBot.Dashboard.Models.ChartViewModel
+
+@{
+    ViewData["Title"] = $"Crypto Bot Dashboard - {Model.Symbol}";
+}
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>@ViewData["Title"]</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
+        .container { max-width: 1600px; margin: 0 auto; }
+        
+        /* Header */
+        .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #30363d; flex-wrap: wrap; gap: 15px; }
+        h1 { color: #00ff88; font-size: 24px; }
+        .badge { background: #00ff88; color: #0d1117; padding: 4px 10px; border-radius: 20px; font-size: 12px; margin-left: 10px; }
+        .mode-badge { background: #ffaa00; color: #0d1117; padding: 4px 10px; border-radius: 20px; font-size: 12px; margin-left: 10px; }
+        
+        /* Forms */
+        .symbol-form select, .symbol-form button, .date-form input, .date-form button { padding: 8px 15px; border-radius: 6px; }
+        .symbol-form select, .date-form input { background: #161b22; color: #c9d1d9; border: 1px solid #30363d; margin-right: 10px; }
+        .symbol-form button, .date-form button { background: #00ff88; color: #0d1117; border: none; cursor: pointer; font-weight: bold; }
+        .mode-toggle { display: flex; gap: 10px; margin-top: 10px; }
+        .mode-btn { background: #30363d; color: #c9d1d9; padding: 6px 15px; border-radius: 6px; text-decoration: none; font-size: 14px; }
+        .mode-btn.active { background: #00ff88; color: #0d1117; }
+        
+        /* Charts Grid */
+        .timeframes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+        .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
+        .card h2 { font-size: 16px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .timeframe-badge { background: #30363d; color: #c9d1d9; padding: 2px 8px; border-radius: 12px; font-size: 10px; }
+        .chart-container { height: 250px; background: #0d1117; border-radius: 5px; margin-bottom: 15px; overflow: hidden; }
+        canvas { width: 100%; height: 100%; }
+        .analysis { background: #0d1117; padding: 10px; border-radius: 5px; font-size: 12px; font-family: monospace; }
+        .analysis p { margin: 5px 0; line-height: 1.4; }
+        
+        /* Signals Panel */
+        .signals-panel { background: #161b22; border: 1px solid #00ff88; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+        .signals-panel h2 { margin-bottom: 15px; color: #00ff88; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+        .signal { padding: 12px; margin: 10px 0; border-radius: 8px; }
+        .signal-buy { background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; }
+        .signal-sell { background: rgba(255, 68, 68, 0.1); border-left: 4px solid #ff4444; }
+        .signal-caution { background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; }
+        .no-signals { text-align: center; padding: 30px; color: #8b949e; }
+        
+        /* Metrics Panel */
+        .metrics-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 15px; margin-top: 15px; }
+        .metric-card { background: #0d1117; padding: 15px; border-radius: 8px; text-align: center; }
+        .metric-value { font-size: 24px; font-weight: bold; color: #00ff88; }
+        .metric-label { font-size: 12px; color: #8b949e; margin-top: 5px; }
+        .metric-green { color: #00ff88; }
+        .metric-red { color: #ff4444; }
+        
+        /* History Table */
+        .history-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 20px; max-height: 400px; overflow-y: auto; }
+        .history-table { width: 100%; font-size: 12px; border-collapse: collapse; }
+        .history-table th, .history-table td { padding: 8px; text-align: left; border-bottom: 1px solid #30363d; }
+        .history-table th { color: #00ff88; position: sticky; top: 0; background: #161b22; }
+        .winner { color: #00ff88; }
+        .loser { color: #ff4444; }
+        
+        /* Footer */
+        .footer { text-align: center; padding: 20px; border-top: 1px solid #30363d; margin-top: 20px; font-size: 12px; color: #8b949e; }
+        .last-update { text-align: right; font-size: 11px; color: #8b949e; margin-top: 20px; }
+        
+        /* Utility */
+        .trend-up { color: #00ff88; }
+        .trend-down { color: #ff4444; }
+        .trend-range { color: #ffaa00; }
+        hr { border-color: #30363d; margin: 15px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>📊 Crypto Trading Bot Dashboard 
+                <span class="badge">Live</span>
+                @if (Model.IsHistorical) { <span class="mode-badge">Historical Mode</span> }
+            </h1>
+            <div>
+                <form method="post" asp-action="LiveMode" style="display: inline;">
+                    <input type="hidden" name="symbol" value="@Model.Symbol" />
+                    <button type="submit" style="background: #00ff88; color: #0d1117; padding: 8px 15px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold;">🟢 Live Mode</button>
+                </form>
+                <form method="post" asp-action="RunBacktest" style="display: inline; margin-left: 10px;">
+                    <input type="hidden" name="symbol" value="@Model.Symbol" />
+                    <input type="date" name="startDate" value="@Model.StartDate.ToString("yyyy-MM-dd")" style="background: #161b22; color: #c9d1d9; border: 1px solid #30363d; padding: 8px; border-radius: 6px;" />
+                    <input type="date" name="endDate" value="@Model.EndDate.ToString("yyyy-MM-dd")" style="background: #161b22; color: #c9d1d9; border: 1px solid #30363d; padding: 8px; border-radius: 6px; margin-left: 5px;" />
+                    <button type="submit" style="background: #00ff88; color: #0d1117; padding: 8px 15px; border-radius: 6px; border: none; cursor: pointer; font-weight: bold;">📊 Run Backtest</button>
+                </form>
+            </div>
+        </div>
+
+        <!-- 3 Timeframes Side by Side -->
+        <div class="timeframes">
+            <!-- 1H TIMEFRAME -->
+            <div class="card">
+                <h2>📈 1-HOUR CHART <span class="timeframe-badge">Trend Analysis</span></h2>
+                <div class="chart-container">
+                    <canvas id="canvas-1h" width="400" height="250"></canvas>
+                </div>
+                <div class="analysis">
+                    <p><strong>📊 Trend:</strong> <span class="@(Model.Analysis1H.Trend.Contains("UP") ? "trend-up" : (Model.Analysis1H.Trend.Contains("DOWN") ? "trend-down" : "trend-range"))">@Model.Analysis1H.Trend</span></p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis1H.Support.ToString("F4")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis1H.Resistance.ToString("F4")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis1H.Pattern</p>
+                    <p><small>HH: @Model.Analysis1H.HigherHighs | HL: @Model.Analysis1H.HigherLows</small></p>
+                </div>
+            </div>
+
+            <!-- 15M TIMEFRAME -->
+            <div class="card">
+                <h2>⏱️ 15-MINUTE CHART <span class="timeframe-badge">Support/Resistance</span></h2>
+                <div class="chart-container">
+                    <canvas id="canvas-15m" width="400" height="250"></canvas>
+                </div>
+                <div class="analysis">
+                    <p><strong>📊 Trend:</strong> <span class="@(Model.Analysis15M.Trend.Contains("UP") ? "trend-up" : (Model.Analysis15M.Trend.Contains("DOWN") ? "trend-down" : "trend-range"))">@Model.Analysis15M.Trend</span></p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis15M.Support.ToString("F4") @(Model.Analysis15M.NearSupport ? "← NEAR" : "")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis15M.Resistance.ToString("F4") @(Model.Analysis15M.NearResistance ? "← NEAR" : "")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis15M.Pattern</p>
+                </div>
+            </div>
+
+            <!-- 5M TIMEFRAME -->
+            <div class="card">
+                <h2>🔥 5-MINUTE CHART <span class="timeframe-badge">Entry Signals</span></h2>
+                <div class="chart-container">
+                    <canvas id="canvas-5m" width="400" height="250"></canvas>
+                </div>
+                <div class="analysis">
+                    <p><strong>📊 Trend:</strong> <span class="@(Model.Analysis5M.Trend.Contains("UP") ? "trend-up" : (Model.Analysis5M.Trend.Contains("DOWN") ? "trend-down" : "trend-range"))">@Model.Analysis5M.Trend</span></p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis5M.Support.ToString("F4") @(Model.Analysis5M.NearSupport ? "← NEAR" : "")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis5M.Resistance.ToString("F4") @(Model.Analysis5M.NearResistance ? "← NEAR" : "")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis5M.Pattern</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Backtest Metrics (only shown in historical mode) -->
+        @if (Model.IsHistorical && Model.Metrics.TotalSignals > 0)
+        {
+            <div class="metrics-panel">
+                <h2>📈 BACKTEST METRICS (@Model.StartDate.ToString("yyyy-MM-dd") to @Model.EndDate.ToString("yyyy-MM-dd"))</h2>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.TotalSignals</div>
+                        <div class="metric-label">Total Signals</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.TotalTrades</div>
+                        <div class="metric-label">Total Trades</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.WinningTrades / @Model.Metrics.LosingTrades</div>
+                        <div class="metric-label">Wins / Losses</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.WinRate.ToString("F1")%</div>
+                        <div class="metric-label">Win Rate</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value @(Model.Metrics.TotalPnL >= 0 ? "metric-green" : "metric-red")">@Model.Metrics.TotalPnL.ToString("F2")%</div>
+                        <div class="metric-label">Total P&amp;L</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.ProfitFactor.ToString("F2")</div>
+                        <div class="metric-label">Profit Factor</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.AvgWin.ToString("F2")%</div>
+                        <div class="metric-label">Avg Win</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.AvgLoss.ToString("F2")%</div>
+                        <div class="metric-label">Avg Loss</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-value">@Model.Metrics.BestPattern</div>
+                        <div class="metric-label">Best Pattern (@Model.Metrics.BestPatternWins wins)</div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Trading Signals Panel -->
+        <div class="signals-panel">
+            <h2>🎯 TRADING SIGNALS @(Model.Signals.Any() ? $"({Model.Signals.Count} active)" : "")</h2>
+            <div class="signals-list">
+                @if (Model.Signals.Any())
+                {
+                    foreach (var signal in Model.Signals)
+                    {
+                        <div class="signal signal-@signal.Type.ToString().ToLower()">
+                            <strong>@signal.Type SIGNAL @(new string('★', signal.Strength))</strong> - @signal.Pattern (@signal.Timeframe)
+                            <div>@signal.Message</div>
+                            <div class="price">Price: @signal.Price.ToString("F4")</div>
+                            <small>@signal.Time.ToString("HH:mm:ss") UTC</small>
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="no-signals">
+                        ⏳ No clear signals at this time<br>
+                        <small>Waiting for patterns like Hammer at Support or Engulfing at Resistance</small>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <!-- Signal History Table (only shown in historical mode) -->
+        @if (Model.IsHistorical && Model.SignalHistory.Any())
+        {
+            <div class="history-panel">
+                <h2>📜 SIGNAL HISTORY (@Model.SignalHistory.Count signals)</h2>
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Time (UTC)</th>
+                            <th>Type</th>
+                            <th>Pattern</th>
+                            <th>Entry Price</th>
+                            <th>Exit Price</th>
+                            <th>P&amp;L</th>
+                            <th>Timeframe</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var signal in Model.SignalHistory.Take(100))
+                        {
+                            <tr class="@(signal.IsWinner ? "winner" : "loser")">
+                                <td>@signal.Time.ToString("MM-dd HH:mm")</td>
+                                <td>@signal.Type</td>
+                                <td>@signal.Pattern</td>
+                                <td>@signal.EntryPrice.ToString("F4")</td>
+                                <td>@signal.ExitPrice.ToString("F4")</td>
+                                <td>@signal.PnLPercent.ToString("F2")%</td>
+                                <td>@signal.Timeframe</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                @if (Model.SignalHistory.Count > 100)
+                {
+                    <p style="text-align: center; margin-top: 10px; color: #8b949e;">... and @(Model.SignalHistory.Count - 100) more signals</p>
+                }
+            </div>
+        }
+
+        <!-- Last Update -->
+        <div class="last-update">
+            Last update: @Model.LastUpdate.ToString("yyyy-MM-dd HH:mm:ss") UTC
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+            <p>📈 Bullish patterns (🟢) | 📉 Bearish patterns (🔴) | ⚖️ Neutral patterns (🟡)</p>
+            <p>Trading signals are for educational purposes only. Always use proper risk management.</p>
+            <p style="margin-top: 10px;">🔨 Hammer | 📌 Piercing | ⭐ Morning Star | 💫 Shooting Star | ✚ Doji | 🟢 Bullish Engulfing | 🔴 Bearish Engulfing | 🌙 Evening Star | 🐦‍⬛ Three Black Crows</p>
+        </div>
+    </div>
+
+    <script>
+        // Chart drawing function
+        function drawCandlestickChart(canvasId, data, width, height) {
+            const canvas = document.getElementById(canvasId);
+            if (!canvas) return;
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            
+            if (!data || data.length === 0) {
+                ctx.fillStyle = '#8b949e';
+                ctx.font = '12px monospace';
+                ctx.fillText('No data available', 10, 50);
+                return;
+            }
+            
+            ctx.clearRect(0, 0, width, height);
+            
+            // Calculate price range with padding
+            let minPrice = Math.min(...data.map(d => d.low));
+            let maxPrice = Math.max(...data.map(d => d.high));
+            let padding = (maxPrice - minPrice) * 0.1;
+            minPrice = Math.max(0, minPrice - padding);
+            maxPrice = maxPrice + padding;
+            let priceRange = maxPrice - minPrice;
+            
+            // Calculate candle width
+            const candleWidth = Math.max(2, Math.min(8, (width / data.length) - 1));
+            const candleSpacing = candleWidth + 1;
+            
+            for (let i = 0; i < data.length; i++) {
+                const candle = data[i];
+                const x = i * candleSpacing;
+                
+                const highY = height - ((candle.high - minPrice) / priceRange) * height;
+                const lowY = height - ((candle.low - minPrice) / priceRange) * height;
+                const openY = height - ((candle.open - minPrice) / priceRange) * height;
+                const closeY = height - ((candle.close - minPrice) / priceRange) * height;
+                
+                const isBullish = candle.close > candle.open;
+                ctx.fillStyle = isBullish ? '#00ff88' : '#ff4444';
+                ctx.strokeStyle = isBullish ? '#00ff88' : '#ff4444';
+                ctx.lineWidth = 1;
+                
+                // Draw wick
+                ctx.beginPath();
+                ctx.moveTo(x + candleWidth / 2, highY);
+                ctx.lineTo(x + candleWidth / 2, lowY);
+                ctx.stroke();
+                
+                // Draw body
+                const bodyTop = Math.min(openY, closeY);
+                const bodyBottom = Math.max(openY, closeY);
+                const bodyHeight = Math.max(1, bodyBottom - bodyTop);
+                
+                ctx.fillRect(x, bodyTop, candleWidth, bodyHeight);
+            }
+        }
+        
+        // Pass data from server to JavaScript
+        const chartData = {
+            candles1H: @Html.Raw(Json.Serialize(Model.Candles1H.Take(100).Select(c => new { time = c.OpenTime, open = c.Open, high = c.High, low = c.Low, close = c.Close }))),
+            candles15M: @Html.Raw(Json.Serialize(Model.Candles15M.Take(100).Select(c => new { time = c.OpenTime, open = c.Open, high = c.High, low = c.Low, close = c.Close }))),
+            candles5M: @Html.Raw(Json.Serialize(Model.Candles5M.Take(100).Select(c => new { time = c.OpenTime, open = c.Open, high = c.High, low = c.Low, close = c.Close })))
+        };
+        
+        // Draw charts when page loads
+        window.addEventListener('load', function() {
+            setTimeout(function() {
+                drawCandlestickChart('canvas-1h', chartData.candles1H, 450, 250);
+                drawCandlestickChart('canvas-15m', chartData.candles15M, 450, 250);
+                drawCandlestickChart('canvas-5m', chartData.candles5M, 450, 250);
+            }, 100);
+        });
+        
+        // Redraw on window resize
+        window.addEventListener('resize', function() {
+            drawCandlestickChart('canvas-1h', chartData.candles1H, 450, 250);
+            drawCandlestickChart('canvas-15m', chartData.candles15M, 450, 250);
+            drawCandlestickChart('canvas-5m', chartData.candles5M, 450, 250);
+        });
+    </script>
+</body>
+</html>

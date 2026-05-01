@@ -2,7 +2,7 @@
   <Project Path="TradingBot.Api/TradingBot.Api.csproj" />
   <Project Path="TradingBot.Backtester/TradingBot.Backtester.csproj" />
   <Project Path="TradingBot.Core/TradingBot.Core.csproj" />
-  <Project Path="TradingBot.Dashboard/TradingBot.Dashboard.csproj" />
+  <Project Path="TradingBot.Dashboard/TradingBot.Dashboard.csproj" Id="99751668-624e-4b0e-863f-f3c7432ce6bc" />
   <Project Path="TradingBot.Tests/TradingBot.Tests.csproj" />
   <Project Path="TradingBot.Worker/TradingBot.Worker.csproj" />
 </Solution>
