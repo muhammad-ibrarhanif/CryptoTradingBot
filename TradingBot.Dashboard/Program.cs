@@ -1,5 +1,8 @@
+using TradingBot.Dashboard.Hubs;
+
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddSignalR();
 // Add services to the container.
 builder.Services.AddControllersWithViews();
 
@@ -24,6 +27,6 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
-
+app.MapHub<SimulationHub>("/simulationHub");
 
 app.Run();

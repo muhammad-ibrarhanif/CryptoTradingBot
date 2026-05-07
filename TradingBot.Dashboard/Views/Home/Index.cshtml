@@ -12,7 +12,7 @@
     <title>@ViewData["Title"]</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #c9d1d9; padding: 20px; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #0d1117; color: #e6edf3; padding: 20px; }
         .container { max-width: 1600px; margin: 0 auto; }
         
         .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; flex-wrap: wrap; gap: 15px; }
@@ -21,17 +21,18 @@
         .mode-badge { background: #ffaa00; color: #0d1117; padding: 4px 10px; border-radius: 20px; font-size: 12px; margin-left: 10px; }
         
         .symbol-form select, .symbol-form button, .date-form input, .date-form button { padding: 8px 15px; border-radius: 6px; }
-        .symbol-form select, .date-form input { background: #161b22; color: #c9d1d9; border: 1px solid #30363d; margin-right: 10px; }
+        .symbol-form select, .date-form input { background: #161b22; color: #e6edf3; border: 1px solid #30363d; margin-right: 10px; }
         .symbol-form button, .date-form button { background: #00ff88; color: #0d1117; border: none; cursor: pointer; font-weight: bold; }
         
         .timeframes { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
         .card { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 15px; }
-        .card h2 { font-size: 16px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
-        .timeframe-badge { background: #30363d; color: #c9d1d9; padding: 2px 8px; border-radius: 12px; font-size: 10px; }
+        .card h2 { font-size: 16px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; color: #e6edf3; }
+        .timeframe-badge { background: #30363d; color: #e6edf3; padding: 2px 8px; border-radius: 12px; font-size: 10px; }
         .chart-container { height: 250px; background: #0d1117; border-radius: 5px; margin-bottom: 15px; }
         canvas { width: 100%; height: 100%; }
-        .analysis { background: #0d1117; padding: 10px; border-radius: 5px; font-size: 12px; font-family: monospace; }
-        .analysis p { margin: 5px 0; }
+        .analysis { background: #0d1117; padding: 10px; border-radius: 5px; font-size: 12px; font-family: monospace; color: #e6edf3; }
+        .analysis p { margin: 5px 0; line-height: 1.4; }
+        .analysis strong { color: #e6edf3; }
         
         .metrics-panel { background: #161b22; border: 1px solid #00ff88; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
         .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-top: 15px; }
@@ -42,15 +43,19 @@
         .metric-red { color: #ff4444; }
         
         .signals-panel { background: #161b22; border: 1px solid #00ff88; border-radius: 10px; padding: 20px; margin-bottom: 20px; }
-        .signal { padding: 12px; margin: 10px 0; border-radius: 8px; }
+        .signals-panel h2 { color: #00ff88; margin-bottom: 15px; }
+        .signal { padding: 12px; margin: 10px 0; border-radius: 8px; color: #e6edf3; }
         .signal-buy { background: rgba(0, 255, 136, 0.1); border-left: 4px solid #00ff88; }
         .signal-sell { background: rgba(255, 68, 68, 0.1); border-left: 4px solid #ff4444; }
         .signal-caution { background: rgba(255, 170, 0, 0.1); border-left: 4px solid #ffaa00; }
+        .signal-info { background: rgba(88, 166, 255, 0.1); border-left: 4px solid #58a6ff; }
+        .signal strong { color: #e6edf3; }
         .no-signals { text-align: center; padding: 30px; color: #8b949e; }
         
         .history-panel { background: #161b22; border: 1px solid #30363d; border-radius: 10px; padding: 20px; margin-bottom: 20px; overflow-x: auto; }
+        .history-panel h2 { color: #e6edf3; margin-bottom: 15px; }
         .history-table { width: 100%; font-size: 12px; border-collapse: collapse; min-width: 800px; }
-        .history-table th, .history-table td { padding: 8px; text-align: left; border-bottom: 1px solid #30363d; }
+        .history-table th, .history-table td { padding: 8px; text-align: left; border-bottom: 1px solid #30363d; color: #e6edf3; }
         .history-table th { color: #00ff88; position: sticky; top: 0; background: #161b22; }
         .winner { color: #00ff88; }
         .loser { color: #ff4444; }
@@ -61,6 +66,9 @@
         .trend-up { color: #00ff88; }
         .trend-down { color: #ff4444; }
         .trend-range { color: #ffaa00; }
+        
+        .indicator-ha-bullish { color: #00ff88; }
+        .indicator-ha-bearish { color: #ff4444; }
     </style>
 </head>
 <body>
@@ -86,48 +94,58 @@
 
         <!-- Row 1: 1H and 15M Charts -->
         <div class="timeframes">
+            <!-- 1-HOUR CHART -->
             <div class="card">
                 <h2>📈 1-HOUR CHART <span class="timeframe-badge">Trend Analysis</span></h2>
                 <div class="chart-container"><canvas id="canvas-1h" width="400" height="250"></canvas></div>
                 <div class="analysis">
-                    <p><strong>Trend:</strong> <span class="@(Model.Analysis1H.Trend.Contains("UP") ? "trend-up" : (Model.Analysis1H.Trend.Contains("DOWN") ? "trend-down" : "trend-range"))">@Model.Analysis1H.Trend</span></p>
-                    <p><strong>Support:</strong> @Model.Analysis1H.Support.ToString("F4")</p>
-                    <p><strong>Resistance:</strong> @Model.Analysis1H.Resistance.ToString("F4")</p>
-                    <p><strong>Pattern:</strong> @Model.Analysis1H.Pattern</p>
+                    <p><strong>Trend:</strong> <span class="@(Model.Analysis1H.Trend.Contains("DOWN") ? "trend-down" : (Model.Analysis1H.Trend.Contains("UP") ? "trend-up" : "trend-range"))">@Model.Analysis1H.Trend</span></p>
+                    <p><strong>📊 Indicators:</strong> HA: <span class="@(Model.Analysis1H.HeikinAshiColor == "🟢 GREEN" ? "indicator-ha-bullish" : "indicator-ha-bearish")">@Model.Analysis1H.HeikinAshiColor</span> | EMA20: @Model.Analysis1H.Ema20.ToString("F2") | RSI: @Model.Analysis1H.Rsi.ToString("F1")</p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis1H.Support.ToString("F4")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis1H.Resistance.ToString("F4")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis1H.Pattern</p>
                 </div>
             </div>
+
+            <!-- 15-MINUTE CHART -->
             <div class="card">
                 <h2>⏱️ 15-MINUTE CHART <span class="timeframe-badge">Support/Resistance</span></h2>
                 <div class="chart-container"><canvas id="canvas-15m" width="400" height="250"></canvas></div>
                 <div class="analysis">
-                    <p><strong>Trend:</strong> <span class="@(Model.Analysis15M.Trend.Contains("UP") ? "trend-up" : (Model.Analysis15M.Trend.Contains("DOWN") ? "trend-down" : "trend-range"))">@Model.Analysis15M.Trend</span></p>
-                    <p><strong>Support:</strong> @Model.Analysis15M.Support.ToString("F4") @(Model.Analysis15M.NearSupport ? "← NEAR" : "")</p>
-                    <p><strong>Resistance:</strong> @Model.Analysis15M.Resistance.ToString("F4") @(Model.Analysis15M.NearResistance ? "← NEAR" : "")</p>
-                    <p><strong>Pattern:</strong> @Model.Analysis15M.Pattern</p>
+                    <p><strong>Trend:</strong> <span class="@(Model.Analysis15M.Trend.Contains("DOWN") ? "trend-down" : (Model.Analysis15M.Trend.Contains("UP") ? "trend-up" : "trend-range"))">@Model.Analysis15M.Trend</span></p>
+                    <p><strong>📊 Indicators:</strong> HA: <span class="@(Model.Analysis15M.HeikinAshiColor == "🟢 GREEN" ? "indicator-ha-bullish" : "indicator-ha-bearish")">@Model.Analysis15M.HeikinAshiColor</span> | EMA20: @Model.Analysis15M.Ema20.ToString("F2") | RSI: @Model.Analysis15M.Rsi.ToString("F1")</p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis15M.Support.ToString("F4") @(Model.Analysis15M.NearSupport ? "← NEAR" : "")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis15M.Resistance.ToString("F4") @(Model.Analysis15M.NearResistance ? "← NEAR" : "")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis15M.Pattern</p>
                 </div>
             </div>
         </div>
 
         <!-- Row 2: 5M and 1M Charts -->
         <div class="timeframes">
+            <!-- 5-MINUTE CHART -->
             <div class="card">
                 <h2>🔥 5-MINUTE CHART <span class="timeframe-badge">Confirmation</span></h2>
                 <div class="chart-container"><canvas id="canvas-5m" width="400" height="250"></canvas></div>
                 <div class="analysis">
-                    <p><strong>Trend:</strong> <span class="@(Model.Analysis5M.Trend.Contains("UP") ? "trend-up" : (Model.Analysis5M.Trend.Contains("DOWN") ? "trend-down" : "trend-range"))">@Model.Analysis5M.Trend</span></p>
-                    <p><strong>Support:</strong> @Model.Analysis5M.Support.ToString("F4") @(Model.Analysis5M.NearSupport ? "← NEAR" : "")</p>
-                    <p><strong>Resistance:</strong> @Model.Analysis5M.Resistance.ToString("F4") @(Model.Analysis5M.NearResistance ? "← NEAR" : "")</p>
-                    <p><strong>Pattern:</strong> @Model.Analysis5M.Pattern</p>
+                    <p><strong>Trend:</strong> <span class="@(Model.Analysis5M.Trend.Contains("DOWN") ? "trend-down" : (Model.Analysis5M.Trend.Contains("UP") ? "trend-up" : "trend-range"))">@Model.Analysis5M.Trend</span></p>
+                    <p><strong>📊 Indicators:</strong> HA: <span class="@(Model.Analysis5M.HeikinAshiColor == "🟢 GREEN" ? "indicator-ha-bullish" : "indicator-ha-bearish")">@Model.Analysis5M.HeikinAshiColor</span> | EMA20: @Model.Analysis5M.Ema20.ToString("F2") | RSI: @Model.Analysis5M.Rsi.ToString("F1")</p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis5M.Support.ToString("F4") @(Model.Analysis5M.NearSupport ? "← NEAR" : "")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis5M.Resistance.ToString("F4") @(Model.Analysis5M.NearResistance ? "← NEAR" : "")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis5M.Pattern</p>
                 </div>
             </div>
+
+            <!-- 1-MINUTE CHART -->
             <div class="card">
                 <h2>⚡ 1-MINUTE CHART <span class="timeframe-badge">Scalping Entry</span></h2>
                 <div class="chart-container"><canvas id="canvas-1m" width="400" height="250"></canvas></div>
                 <div class="analysis">
-                    <p><strong>1H Trend:</strong> @Model.Analysis1H.Trend | <strong>15M Trend:</strong> @Model.Analysis15M.Trend</p>
-                    <p><strong>Support:</strong> @Model.Analysis1M.Support.ToString("F4") @(Model.Analysis1M.NearSupport ? "← NEAR" : "")</p>
-                    <p><strong>Resistance:</strong> @Model.Analysis1M.Resistance.ToString("F4") @(Model.Analysis1M.NearResistance ? "← NEAR" : "")</p>
-                    <p><strong>Pattern:</strong> @Model.Analysis1M.Pattern</p>
+                    <p><strong>1H Trend:</strong> <span class="@(Model.Analysis1H.Trend.Contains("DOWN") ? "trend-down" : (Model.Analysis1H.Trend.Contains("UP") ? "trend-up" : "trend-range"))">@Model.Analysis1H.Trend</span> | <strong>15M Trend:</strong> <span class="@(Model.Analysis15M.Trend.Contains("DOWN") ? "trend-down" : (Model.Analysis15M.Trend.Contains("UP") ? "trend-up" : "trend-range"))">@Model.Analysis15M.Trend</span></p>
+                    <p><strong>📊 Indicators:</strong> HA: <span class="@(Model.Analysis1M.HeikinAshiColor == "🟢 GREEN" ? "indicator-ha-bullish" : "indicator-ha-bearish")">@Model.Analysis1M.HeikinAshiColor</span> | EMA20: @Model.Analysis1M.Ema20.ToString("F2") | RSI: @Model.Analysis1M.Rsi.ToString("F1")</p>
+                    <p><strong>🛡️ Support:</strong> @Model.Analysis1M.Support.ToString("F4") @(Model.Analysis1M.NearSupport ? "← NEAR" : "")</p>
+                    <p><strong>⚔️ Resistance:</strong> @Model.Analysis1M.Resistance.ToString("F4") @(Model.Analysis1M.NearResistance ? "← NEAR" : "")</p>
+                    <p><strong>🔍 Pattern:</strong> @Model.Analysis1M.Pattern</p>
                 </div>
             </div>
         </div>
@@ -138,38 +156,14 @@
             <div class="metrics-panel">
                 <h2>📈 1-MINUTE SCALPING BACKTEST METRICS (@Model.StartDate.ToString("yyyy-MM-dd") to @Model.EndDate.ToString("yyyy-MM-dd"))</h2>
                 <div class="metrics-grid">
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.TotalTrades</div>
-                        <div class="metric-label">Total Trades</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.WinningTrades / @Model.Metrics.LosingTrades</div>
-                        <div class="metric-label">Wins / Losses</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.WinRate.ToString("F1")%</div>
-                        <div class="metric-label">Win Rate</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value @(Model.Metrics.TotalPnL >= 0 ? "metric-green" : "metric-red")">@Model.Metrics.TotalPnL.ToString("F2")%</div>
-                        <div class="metric-label">Total P&amp;L</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.ProfitFactor.ToString("F2")</div>
-                        <div class="metric-label">Profit Factor</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.AvgWin.ToString("F2")%</div>
-                        <div class="metric-label">Avg Win</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.AvgLoss.ToString("F2")%</div>
-                        <div class="metric-label">Avg Loss</div>
-                    </div>
-                    <div class="metric-card">
-                        <div class="metric-value">@Model.Metrics.BestPattern</div>
-                        <div class="metric-label">Best Pattern (@Model.Metrics.BestPatternWins wins)</div>
-                    </div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.TotalTrades</div><div class="metric-label">Total Trades</div></div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.WinningTrades / @Model.Metrics.LosingTrades</div><div class="metric-label">Wins / Losses</div></div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.WinRate.ToString("F1")%</div><div class="metric-label">Win Rate</div></div>
+                    <div class="metric-card"><div class="metric-value @(Model.Metrics.TotalPnL >= 0 ? "metric-green" : "metric-red")">@Model.Metrics.TotalPnL.ToString("F2")%</div><div class="metric-label">Total P&amp;L</div></div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.ProfitFactor.ToString("F2")</div><div class="metric-label">Profit Factor</div></div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.AvgWin.ToString("F2")%</div><div class="metric-label">Avg Win</div></div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.AvgLoss.ToString("F2")%</div><div class="metric-label">Avg Loss</div></div>
+                    <div class="metric-card"><div class="metric-value">@Model.Metrics.BestPattern</div><div class="metric-label">Best Pattern (@Model.Metrics.BestPatternWins wins)</div></div>
                 </div>
             </div>
         }
@@ -185,7 +179,7 @@
                         <div class="signal signal-@signal.Type.ToString().ToLower()">
                             <strong>@signal.Type SIGNAL @(new string('★', signal.Strength))</strong> - @signal.Pattern (@signal.Timeframe)
                             <div>@signal.Message</div>
-                            <div class="price">Price: @signal.Price.ToString("F4")</div>
+                            <div>Price: @signal.Price.ToString("F4")</div>
                             <small>@signal.Time.ToString("HH:mm:ss") UTC</small>
                         </div>
                     }
@@ -198,62 +192,61 @@
         </div>
 
         <!-- Detailed Signal History (Historical Mode Only) -->
-        <!-- Detailed Signal History (Historical Mode Only) -->
-@if (Model.IsHistorical && Model.SignalHistory.Any())
-{
-    <div class="history-panel">
-        <h2>📜 DETAILED SIGNAL HISTORY (@Model.SignalHistory.Count trades)</h2>
-        <div style="overflow-x: auto; max-height: 500px; overflow-y: auto;">
-            <table class="history-table" style="min-width: 1000px; width: 100%;">
-                <thead style="position: sticky; top: 0; background: #161b22; z-index: 10;">
-                    <tr>
-                        <th style="position: sticky; left: 0; background: #161b22; z-index: 11;">Time (UTC)</th>
-                        <th>Type</th>
-                        <th>Pattern</th>
-                        <th>Entry Price</th>
-                        <th>Exit Price</th>
-                        <th>P&amp;L</th>
-                        <th>Result</th>
-                        <th>Timeframe</th>
-                        <th>Reason</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach (var signal in Model.SignalHistory.OrderBy(s => s.Time).Take(100))
-                    {
-                        <tr class="@(signal.IsWinner ? "winner" : "loser")">
-                            <td style="position: sticky; left: 0; background: #0d1117; white-space: nowrap;">@signal.Time.ToString("MM-dd HH:mm:ss")</td>
-                            <td><strong>@signal.Type</strong></td>
-                            <td>@signal.Pattern</td>
-                            <td>@signal.EntryPrice.ToString("F4")</td>
-                            <td>@signal.ExitPrice.ToString("F4")</td>
-                            <td class="@(signal.PnLPercent >= 0 ? "winner" : "loser")">@signal.PnLPercent.ToString("F2")%</td>
-                            <td>@(signal.IsWinner ? "✓ WIN" : "✗ LOSS")</td>
-                            <td>@signal.Timeframe</td>
-                            <td style="max-width: 250px; word-wrap: break-word;">@signal.Reason</td>
-                        </tr>
-                    }
-                </tbody>
-            </table>
-        </div>
-        @if (Model.SignalHistory.Count > 100)
+        @if (Model.IsHistorical && Model.SignalHistory.Any())
         {
-            <p style="margin-top: 10px; color: #8b949e;">... and @(Model.SignalHistory.Count - 100) more signals</p>
+            <div class="history-panel">
+                <h2>📜 DETAILED SIGNAL HISTORY (@Model.SignalHistory.Count trades)</h2>
+                <div style="overflow-x: auto; max-height: 500px; overflow-y: auto;">
+                    <table class="history-table" style="min-width: 1000px; width: 100%;">
+                        <thead style="position: sticky; top: 0; background: #161b22; z-index: 10;">
+                            <tr>
+                                <th style="position: sticky; left: 0; background: #161b22; z-index: 11;">Time (UTC)</th>
+                                <th>Type</th>
+                                <th>Pattern</th>
+                                <th>Entry Price</th>
+                                <th>Exit Price</th>
+                                <th>P&amp;L</th>
+                                <th>Result</th>
+                                <th>Timeframe</th>
+                                <th>Reason</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var signal in Model.SignalHistory.OrderByDescending(s => s.Time).Take(100))
+                            {
+                                <tr class="@(signal.IsWinner ? "winner" : "loser")">
+                                    <td style="position: sticky; left: 0; background: #0d1117; white-space: nowrap;">@signal.Time.ToString("MM-dd HH:mm:ss")</td>
+                                    <td><strong>@signal.Type</strong></td>
+                                    <td>@signal.Pattern</td>
+                                    <td>@signal.EntryPrice.ToString("F4")</td>
+                                    <td>@signal.ExitPrice.ToString("F4")</td>
+                                    <td class="@(signal.PnLPercent >= 0 ? "winner" : "loser")">@signal.PnLPercent.ToString("F2")%</td>
+                                    <td>@(signal.IsWinner ? "✓ WIN" : "✗ LOSS")</td>
+                                    <td>@signal.Timeframe</td>
+                                    <td style="max-width: 250px; word-wrap: break-word;">@signal.Reason</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+                @if (Model.SignalHistory.Count > 100)
+                {
+                    <p style="margin-top: 10px; color: #8b949e;">... and @(Model.SignalHistory.Count - 100) more signals</p>
+                }
+                <p style="margin-top: 10px; font-size: 12px;">
+                    📊 Summary: @Model.SignalHistory.Count trades | 
+                    ✅ Wins: @Model.Metrics.WinningTrades | 
+                    ❌ Losses: @Model.Metrics.LosingTrades | 
+                    📈 Win Rate: @Model.Metrics.WinRate:F1% | 
+                    💰 Total P&L: <span class="@(Model.Metrics.TotalPnL >= 0 ? "winner" : "loser")">@Model.Metrics.TotalPnL.ToString("F2")%</span>
+                </p>
+            </div>
         }
-        <p style="margin-top: 10px; font-size: 12px;">
-            📊 Summary: @Model.SignalHistory.Count trades | 
-            ✅ Wins: @Model.Metrics.WinningTrades | 
-            ❌ Losses: @Model.Metrics.LosingTrades | 
-            📈 Win Rate: @Model.Metrics.WinRate:F1% | 
-            💰 Total P&L: <span class="@(Model.Metrics.TotalPnL >= 0 ? "winner" : "loser")">@Model.Metrics.TotalPnL.ToString("F2")%</span>
-        </p>
-    </div>
-}
-
 
         <div class="last-update">Last update: @Model.LastUpdate.ToString("yyyy-MM-dd HH:mm:ss") UTC</div>
         <div class="footer">
-            <p>📈 Bullish patterns | 📉 Bearish patterns | ⚖️ Neutral patterns</p>
+            <p>📈 Indicators: Heikin Ashi | EMA20 | RSI (14)</p>
+            <p>📈 Bullish patterns (🟢) | 📉 Bearish patterns (🔴) | ⚖️ Neutral patterns (🟡)</p>
             <p>Scalping parameters: 0.15% target, 0.1% stop loss, 10-minute max hold</p>
             <p>Trading signals for educational purposes only. Always use proper risk management.</p>
         </div>

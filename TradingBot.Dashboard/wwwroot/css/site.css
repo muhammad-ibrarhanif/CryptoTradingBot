@@ -11,6 +11,80 @@ body {
     padding: 20px;
 }
 
+/* Add to your existing CSS */
+body {
+    color: #e6edf3; /* Lighter text color */
+}
+
+.card, .analysis, .signals-panel, .metrics-panel, .history-panel {
+    color: #e6edf3;
+}
+
+    .analysis p, .signal, .metric-card {
+        color: #e6edf3;
+    }
+
+.signal-buy {
+    background: rgba(0, 255, 136, 0.15);
+    border-left: 4px solid #00ff88;
+    color: #00ff88;
+}
+
+.signal-sell {
+    background: rgba(255, 68, 68, 0.15);
+    border-left: 4px solid #ff4444;
+    color: #ff4444;
+}
+
+.signal-caution {
+    background: rgba(255, 170, 0, 0.15);
+    border-left: 4px solid #ffaa00;
+    color: #ffaa00;
+}
+
+.no-signals {
+    color: #8b949e;
+}
+
+/* Fix for light text on dark background */
+h1, h2, h3, h4, .badge, .timeframe-badge {
+    color: #e6edf3;
+}
+
+.metric-value {
+    color: #00ff88;
+}
+
+.metric-label {
+    color: #8b949e;
+}
+
+.history-table th {
+    color: #00ff88;
+    background: #161b22;
+}
+
+.history-table td {
+    color: #e6edf3;
+}
+
+.winner {
+    color: #00ff88;
+}
+
+.loser {
+    color: #ff4444;
+}
+
+/* Fix for support/resistance values */
+.analysis strong {
+    color: #e6edf3;
+}
+
+.analysis p span {
+    color: #e6edf3;
+}
+
 .container {
     max-width: 1400px;
     margin: 0 auto;
